@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>局域网聊天室</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #e8eaee; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #2c3e50; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  header h1 { font-size: 17px; flex: 1; }
+  #me { font-size: 13px; background: #34495e; padding: 4px 10px; border-radius: 12px; cursor: pointer; }
+  #me:hover { background: #41576d; }
+  #status { font-size: 12px; width: 10px; height: 10px; border-radius: 50%; background: #e74c3c; }
+  #status.on { background: #2ecc71; }
+  main { flex: 1; display: flex; overflow: hidden; }
+  #chat { flex: 1; overflow-y: auto; padding: 16px; }
+  #sidebar { width: 180px; background: #f5f6f8; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; flex-shrink: 0; }
+  #sideToggle { width: 16px; background: #eef0f3; border-left: 1px solid #ddd; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 11px; flex-shrink: 0; user-select: none; }
+  #sideToggle:hover { background: #dfe4e9; color: #666; }
+  html[data-theme="dark"] #sideToggle { background: #1f242e; border-color: #333; color: #666; }
+  html[data-theme="dark"] #sideToggle:hover { background: #2c333f; color: #aaa; }
+  #sidebar h3 { font-size: 13px; color: #888; margin-bottom: 8px; }
+  #sidebar li { list-style: none; font-size: 14px; padding: 5px 8px; background: #fff; border-radius: 6px; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sidebar li .dot { color: #2ecc71; margin-right: 4px; }
+  .msg { margin-bottom: 14px; display: flex; flex-direction: column; align-items: flex-start; }
+  .msg.mine { align-items: flex-end; }
+  .msg .meta { font-size: 12px; color: #999; margin-bottom: 3px; }
+  .msg .bubble { max-width: 70%; background: #fff; padding: 9px 13px; border-radius: 10px; border-top-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.08); word-break: break-word; white-space: pre-wrap; font-size: 15px; line-height: 1.5; }
+  .msg.mine .bubble { background: #95d4a5; border-radius: 10px; border-top-right-radius: 2px; }
+  .msg .bubble img { max-width: 260px; max-height: 260px; border-radius: 6px; display: block; cursor: zoom-in; }
+  .sys { text-align: center; font-size: 12px; color: #aaa; margin: 10px 0; }
+  .divider { text-align: center; font-size: 12px; color: #e67e22; margin: 12px 0; position: relative; }
+  .divider::before, .divider::after { content: ""; position: absolute; top: 50%; width: 30%; height: 1px; background: #f0c896; }
+  .divider::before { left: 0; } .divider::after { right: 0; }
+  footer { display: flex; gap: 8px; padding: 10px 14px; background: #fff; border-top: 1px solid #ddd; flex-shrink: 0; align-items: flex-end; }
+  #input { flex: 1; border: 1px solid #ccc; border-radius: 8px; padding: 9px 12px; font-size: 15px; resize: none; max-height: 120px; font-family: inherit; outline: none; }
+  #input:focus { border-color: #3498db; }
+  button { border: none; border-radius: 8px; padding: 10px 18px; font-size: 15px; cursor: pointer; }
+  #sendBtn { background: #3498db; color: #fff; }
+  #sendBtn:hover { background: #2980b9; }
+  #imgBtn { background: #ecf0f1; font-size: 18px; padding: 8px 13px; }
+  #imgBtn:hover { background: #dfe4e6; }
+  #mask, #settingsMask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #mask.show, #settingsMask.show { display: flex; }
+  .dialog { background: #fff; border-radius: 12px; padding: 24px; width: 320px; }
+  .dialog h2 { font-size: 17px; margin-bottom: 6px; }
+  .dialog p { font-size: 13px; color: #888; margin-bottom: 14px; }
+  .dialog input { width: 100%; border: 1px solid #ccc; border-radius: 8px; padding: 9px 12px; font-size: 15px; margin-bottom: 14px; outline: none; }
+  .dialog button { width: 100%; background: #3498db; color: #fff; }
+  #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; cursor: zoom-out; }
+  #viewer img { max-width: 92%; max-height: 92%; }
+  #viewer.show { display: flex; }
+  footer { position: relative; }
+  .at { color: #e67e22; font-weight: bold; }
+  .msg.mention .bubble { background: #fff3cd; border: 1px solid #f0ad4e; box-shadow: 0 0 8px rgba(240,173,78,.5); }
+  .msg.mine.mention .bubble { background: #ffe9b0; }
+  .msg .tag { display: inline-block; background: #e67e22; color: #fff; font-size: 11px; border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
+  #mentionBox { position: absolute; bottom: 100%; left: 60px; margin-bottom: 6px; background: #fff; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15); max-height: 220px; overflow-y: auto; display: none; min-width: 160px; z-index: 5; }
+  #mentionBox.show { display: block; }
+  #mentionBox div { padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  #mentionBox div:hover, #mentionBox div.sel { background: #eaf4fd; }
+  #mentionBox div .sub { color: #aaa; font-size: 12px; margin-left: 6px; }
+  #sidebar li { cursor: pointer; }
+  #sidebar li:hover { background: #eaf4fd; }
+  .msg .bubble video { max-width: 300px; max-height: 260px; border-radius: 6px; display: block; background: #000; }
+  .msg .bubble img.sticker, .msg .bubble video.sticker { max-width: 130px; max-height: 130px; border-radius: 6px; }
+  .msg .bubble.media { position: relative; }
+  .saveStk { position: absolute; top: 6px; right: 6px; padding: 3px 10px; font-size: 12px; background: rgba(0,0,0,.55); color: #fff; border-radius: 11px; display: none; z-index: 2; }
+  .msg .bubble.media:hover .saveStk { display: block; }
+  .saveStk:hover { background: rgba(0,0,0,.85); }
+  #emojiPanel .stickers video { width: 100%; aspect-ratio: 1; object-fit: contain; cursor: pointer; border-radius: 8px; background: #f7f7f7; padding: 4px; }
+  #emojiPanel .stickers video:hover { outline: 2px solid #3498db; }
+  html[data-theme="dark"] #emojiPanel .stickers video { background: #1a1d23; }
+  #emojiPanel { position: absolute; bottom: 100%; left: 10px; margin-bottom: 6px; background: #fff; border: 1px solid #ccc; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15); width: 340px; display: none; z-index: 5; }
+  #emojiPanel.show { display: block; }
+  #emojiPanel .tabs { display: flex; border-bottom: 1px solid #eee; }
+  #emojiPanel .tabs div { flex: 1; text-align: center; padding: 8px; font-size: 14px; cursor: pointer; color: #888; }
+  #emojiPanel .tabs div.on { color: #3498db; border-bottom: 2px solid #3498db; }
+  #emojiPanel .grid { display: grid; grid-template-columns: repeat(8, 1fr); padding: 8px; max-height: 200px; overflow-y: auto; }
+  #emojiPanel .grid span { font-size: 22px; text-align: center; padding: 5px; cursor: pointer; border-radius: 6px; }
+  #emojiPanel .grid span:hover { background: #f0f0f0; }
+  #emojiPanel .stickers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; max-height: 220px; overflow-y: auto; }
+  #emojiPanel .stickers img { width: 100%; aspect-ratio: 1; object-fit: contain; cursor: pointer; border-radius: 8px; background: #f7f7f7; padding: 4px; }
+  #emojiPanel .stickers img:hover { outline: 2px solid #3498db; }
+  #emojiPanel .stickers .addTile { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 30px; color: #bbb; border: 1px dashed #ccc; border-radius: 8px; cursor: pointer; box-sizing: border-box; }
+  #emojiPanel .stickers .addTile:hover { color: #3498db; border-color: #3498db; }
+  #emojiPanel .empty { grid-column: 1/-1; text-align: center; color: #aaa; font-size: 13px; padding: 18px 0; }
+  #upProgress { font-size: 12px; color: #e67e22; align-self: center; display: none; white-space: nowrap; }
+  #dropMask { position: fixed; inset: 0; background: rgba(52,152,219,.25); border: 4px dashed #3498db; display: none; align-items: center; justify-content: center; z-index: 30; pointer-events: none; box-sizing: border-box; }
+  #dropMask.show { display: flex; }
+  #dropMask div { background: rgba(44,62,80,.92); color: #fff; font-size: 20px; padding: 20px 42px; border-radius: 12px; }
+  @media (max-width: 640px) { #sidebar, #sideToggle { display: none; } .msg .bubble { max-width: 85%; } }
+  /* ---------- 黑夜主题 ---------- */
+  html[data-theme="dark"] body { background: #1a1d23; color: #ddd; }
+  html[data-theme="dark"] header { background: #11141a; }
+  html[data-theme="dark"] #me { background: #232833; }
+  html[data-theme="dark"] #sidebar { background: #232833; border-color: #333; }
+  html[data-theme="dark"] #sidebar h3 { color: #777; }
+  html[data-theme="dark"] #sidebar li { background: #2c333f; color: #ddd; }
+  html[data-theme="dark"] #sidebar li:hover { background: #354052; }
+  html[data-theme="dark"] .msg .bubble { background: #2c333f; color: #e6e6e6; box-shadow: none; }
+  html[data-theme="dark"] .msg.mine .bubble { background: #3d6b4a; }
+  html[data-theme="dark"] .msg.mention .bubble,
+  html[data-theme="dark"] .msg.mine.mention .bubble { background: #4d4426; border-color: #a08229; }
+  html[data-theme="dark"] .msg .meta { color: #777; }
+  html[data-theme="dark"] .sys { color: #666; }
+  html[data-theme="dark"] .divider { color: #c9862b; }
+  html[data-theme="dark"] .divider::before, html[data-theme="dark"] .divider::after { background: #5a4a28; }
+  html[data-theme="dark"] footer { background: #11141a; border-color: #333; }
+  html[data-theme="dark"] #input { background: #232833; color: #eee; border-color: #444; }
+  html[data-theme="dark"] #imgBtn, html[data-theme="dark"] #videoBtn, html[data-theme="dark"] #emojiBtn { background: #2c333f; }
+  html[data-theme="dark"] .dialog { background: #232833; color: #eee; }
+  html[data-theme="dark"] .dialog input { background: #1a1d23; color: #eee; border-color: #444; }
+  html[data-theme="dark"] #mentionBox, html[data-theme="dark"] #emojiPanel { background: #232833; border-color: #444; }
+  html[data-theme="dark"] #mentionBox div:hover, html[data-theme="dark"] #mentionBox div.sel { background: #354052; }
+  html[data-theme="dark"] #emojiPanel .tabs { border-color: #333; }
+  html[data-theme="dark"] #emojiPanel .tabs div { color: #999; }
+  html[data-theme="dark"] #emojiPanel .tabs div.on { color: #3498db; }
+  html[data-theme="dark"] #emojiPanel .grid span:hover { background: #354052; }
+  html[data-theme="dark"] #emojiPanel .stickers img { background: #1a1d23; }
+  html[data-theme="dark"] #emojiPanel .stickers .addTile { border-color: #555; color: #666; }
+  html[data-theme="dark"] .themeRow button { background: #1a1d23; color: #ccc; }
+  html[data-theme="dark"] .themeRow button.on { background: #3498db; color: #fff; }
+  /* ---------- 设置面板 ---------- */
+  .dialog .sec { margin-bottom: 16px; text-align: left; }
+  .dialog .sec .t { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
+  .themeRow { display: flex; gap: 8px; }
+  .themeRow button { flex: 1; background: #ecf0f1; color: #333; padding: 9px; }
+  .themeRow button.on { background: #3498db; color: #fff; }
+  #clearBtn { background: #e74c3c; color: #fff; }
+  #clearBtn:hover { background: #c0392b; }
+  #settingsClose { background: #ecf0f1; color: #333; }
+  html[data-theme="dark"] #settingsClose { background: #1a1d23; color: #ccc; }
+</style>
+</head>
+<body>
+<header>
+  <span id="status"></span>
+  <h1>局域网聊天室</h1>
+  <span id="me" title="点击打开设置"></span>
+</header>
+<main>
+  <div id="chat"></div>
+  <div id="sideToggle" title="收起 / 展开在线用户列表">▶</div>
+  <aside id="sidebar">
+    <h3>在线用户 (<span id="onlineCount">0</span>)</h3>
+    <ul id="users"></ul>
+  </aside>
+</main>
+<footer>
+  <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+  <input type="file" id="videoInput" accept="video/mp4,video/webm,video/quicktime,.m4v,.mov" hidden>
+  <input type="file" id="stickerInput" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime" hidden>
+  <div id="mentionBox"></div>
+  <div id="emojiPanel">
+    <div class="tabs"><div id="tabEmoji" class="on">表情</div><div id="tabSticker">贴纸</div></div>
+    <div class="grid" id="emojiGrid"></div>
+    <div class="stickers" id="stickerGrid" style="display:none"></div>
+  </div>
+  <button id="emojiBtn" title="表情 / 贴纸">😀</button>
+  <button id="imgBtn" title="发送图片">🖼</button>
+  <button id="videoBtn" title="发送视频">🎬</button>
+  <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，支持粘贴截图/拖入文件"></textarea>
+  <span id="upProgress"></span>
+  <button id="sendBtn">发送</button>
+</footer>
+
+<div id="mask">
+  <div class="dialog">
+    <h2>设置昵称</h2>
+    <p>你的身份由 IP 地址自动识别，昵称只需设置一次，以后会记住。</p>
+    <input id="nickInput" maxlength="20" placeholder="输入你的昵称">
+    <button id="nickOk">进入聊天室</button>
+  </div>
+</div>
+<div id="viewer"><img></div>
+<div id="dropMask"><div>📂 松开鼠标，发送到聊天室</div></div>
+
+<div id="settingsMask">
+  <div class="dialog">
+    <h2 style="margin-bottom:14px">设置</h2>
+    <div class="sec">
+      <label class="t">昵称（你的 IP：<span id="myIpText"></span>）</label>
+      <input id="setNickInput" maxlength="20" placeholder="输入你的昵称">
+      <button id="setNickSave" style="margin-top:8px">保存昵称</button>
+    </div>
+    <div class="sec">
+      <label class="t">页面主题</label>
+      <div class="themeRow">
+        <button id="themeLight">☀ 白天</button>
+        <button id="themeDark">🌙 黑夜</button>
+      </div>
+    </div>
+    <div class="sec">
+      <label class="t">危险操作</label>
+      <button id="clearBtn">清空全部聊天记录</button>
+    </div>
+    <button id="settingsClose">关闭</button>
+  </div>
+</div>
+
+<script>
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('input');
+const meEl = document.getElementById('me');
+const statusEl = document.getElementById('status');
+const maskEl = document.getElementById('mask');
+const nickInput = document.getElementById('nickInput');
+
+let myIp = null, myNick = null, ws = null, lastRead = +localStorage.getItem('lastRead') || 0;
+let historyLoaded = false, unreadDividerShown = false;
+let onlineUsers = [];
+const knownNicks = new Set(['所有人', 'all']);
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtTime(ts) {
+  const d = new Date(ts);
+  const today = new Date().toDateString() === d.toDateString();
+  const hm = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  return today ? hm : (d.getMonth()+1) + '月' + d.getDate() + '日 ' + hm;
+}
+function atBottom() {
+  return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
+}
+function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
+
+function isVideoUrl(u) { return /\.(mp4|webm|mov|m4v)$/i.test(u || ''); }
+
+// 把聊天中的图片/视频收藏进贴纸库
+async function saveSticker(btn, url) {
+  btn.disabled = true;
+  try {
+    const r = await (await fetch('/api/save-sticker', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })).json();
+    btn.textContent = r.ok ? '已收藏 ✓' : (r.error || '收藏失败');
+  } catch { btn.textContent = '收藏失败'; }
+  setTimeout(() => { btn.textContent = '存为贴纸'; btn.disabled = false; }, 1500);
+}
+
+function renderText(text) {
+  let html = esc(text);
+  const nicks = [...knownNicks].filter(n => n !== 'all' && n !== '所有人' && text.includes('@' + n))
+    .sort((a, b) => b.length - a.length);
+  for (const n of nicks) html = html.split('@' + esc(n)).join('<span class="at">@' + esc(n) + '</span>');
+  html = html.replace(/@(所有人|all)(?![\w一-龥])/gi, '<span class="at">@$1</span>');
+  return html;
+}
+
+function isMentionMe(m) {
+  return m.mentionAll || (m.mentions || []).includes(myIp);
+}
+
+function addMessage(m, isHistory) {
+  if (m.kind === 'system') {
+    const div = document.createElement('div');
+    div.className = 'sys';
+    div.textContent = fmtTime(m.time) + '  ' + m.text;
+    chatEl.appendChild(div);
+    return;
+  }
+  if (m.nickname) knownNicks.add(m.nickname);
+  // 历史消息里，在自己上次离开之后别人发的内容前插一条“以下是新留言”分隔线
+  if (isHistory && !unreadDividerShown && m.time > lastRead && m.ip !== myIp) {
+    unreadDividerShown = true;
+    const div = document.createElement('div');
+    div.className = 'divider';
+    div.textContent = '以下是你不在线时的留言';
+    chatEl.appendChild(div);
+  }
+  const mine = m.ip === myIp;
+  const mentioned = !mine && isMentionMe(m);
+  const div = document.createElement('div');
+  div.className = 'msg' + (mine ? ' mine' : '') + (mentioned ? ' mention' : '');
+  const meta = esc(m.nickname) + ' · ' + fmtTime(m.time) + (mentioned ? '<span class="tag">@我</span>' : '');
+  if (m.kind === 'image' || m.kind === 'video' || m.kind === 'sticker') {
+    let inner;
+    if (m.kind === 'video') {
+      inner = '<video src="' + m.url + '" controls preload="metadata"></video>';
+    } else if (m.kind === 'sticker') {
+      inner = isVideoUrl(m.url)
+        ? '<video class="sticker" src="' + m.url + '" muted loop autoplay playsinline></video>'
+        : '<img class="sticker" src="' + m.url + '" onclick="viewImg(this.src)">';
+    } else {
+      inner = '<img src="' + m.url + '" onclick="viewImg(this.src)">';
+    }
+    // 图片/视频可收藏为贴纸；贴纸本身不显示收藏按钮
+    const saveBtn = m.kind === 'sticker' ? '' :
+      '<button class="saveStk" onclick="event.stopPropagation();saveSticker(this,\'' + m.url + '\')">存为贴纸</button>';
+    div.innerHTML = '<div class="meta">' + meta + '</div><div class="bubble media">' + inner + saveBtn + '</div>';
+  } else {
+    div.innerHTML = '<div class="meta">' + meta + '</div><div class="bubble">' + renderText(m.text) + '</div>';
+  }
+  chatEl.appendChild(div);
+}
+
+function viewImg(src) {
+  const v = document.getElementById('viewer');
+  v.querySelector('img').src = src;
+  v.classList.add('show');
+}
+document.getElementById('viewer').onclick = function() { this.classList.remove('show'); };
+
+// ---------- 侧边栏展开 / 收起 ----------
+const sidebarEl = document.getElementById('sidebar');
+const sideToggle = document.getElementById('sideToggle');
+
+function setSidebar(collapsed) {
+  sidebarEl.style.display = collapsed ? 'none' : '';
+  sideToggle.textContent = collapsed ? '◀' : '▶';
+  sideToggle.title = collapsed ? '展开在线用户列表' : '收起在线用户列表';
+  localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '');
+}
+sideToggle.onclick = () => setSidebar(sidebarEl.style.display !== 'none');
+setSidebar(localStorage.getItem('sidebarCollapsed') === '1');
+
+function renderUsers(list) {
+  onlineUsers = list;
+  list.forEach(u => knownNicks.add(u.nickname));
+  document.getElementById('onlineCount').textContent = list.length;
+  document.getElementById('users').innerHTML = list
+    .map(u => '<li data-nick="' + esc(u.nickname) + '" title="点击 @TA"><span class="dot">●</span>' + esc(u.nickname) + (u.ip === myIp ? '（我）' : '') + '</li>').join('');
+}
+document.getElementById('users').addEventListener('click', e => {
+  const li = e.target.closest('li[data-nick]');
+  if (!li) return;
+  insertAtCursor('@' + li.dataset.nick + ' ');
+  inputEl.focus();
+});
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + location.host + '/ws');
+  ws.onopen = () => statusEl.classList.add('on');
+  ws.onclose = () => {
+    statusEl.classList.remove('on');
+    setTimeout(connect, 2000); // 断线自动重连
+  };
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'init') {
+      myIp = data.me.ip; myNick = data.me.nickname;
+      meEl.textContent = myNick + ' (' + myIp + ')';
+      if (!historyLoaded) {
+        historyLoaded = true;
+        data.history.forEach(m => addMessage(m, true));
+      }
+      renderUsers(data.users);
+      scrollBottom();
+    } else if (data.type === 'chat') {
+      const stick = atBottom();
+      addMessage(data.message, false);
+      if (stick || data.message.ip === myIp) scrollBottom();
+      const m = data.message;
+      if (m.ip === myIp || m.kind === 'system') return;
+      if (!document.hasFocus()) {
+        unread++;
+        updateBadge();
+        // 页面完全在后台时，弹系统通知让任务栏高亮
+        if (document.hidden && m.kind === 'chat') {
+          notify(m.nickname, (m.text || '').slice(0, 80));
+        }
+      }
+      if (m.kind === 'chat' && isMentionMe(m)) alertMention(m);
+    } else if (data.type === 'clear') {
+      chatEl.innerHTML = '';
+      unreadDividerShown = false;
+    } else if (data.type === 'users') {
+      renderUsers(data.users);
+    }
+  };
+}
+
+// 记录已读位置（用于下次显示“离线留言”分隔线）
+window.addEventListener('beforeunload', () => localStorage.setItem('lastRead', Date.now()));
+setInterval(() => { if (historyLoaded) localStorage.setItem('lastRead', Date.now()); }, 5000);
+
+// ---------- 未读提醒：标题计数 + favicon 红点角标 + 后台系统通知 ----------
+let audioCtx = null, titleTimer = null, unread = 0;
+const baseTitle = document.title;
+
+const favCanvas = document.createElement('canvas');
+favCanvas.width = favCanvas.height = 64;
+const favLink = document.createElement('link');
+favLink.rel = 'icon';
+document.head.appendChild(favLink);
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawFavicon(count) {
+  const ctx = favCanvas.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.fillStyle = '#3498db';
+  roundRectPath(ctx, 2, 2, 60, 60, 14);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.ellipse(32, 29, 18, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(21, 38); ctx.lineTo(29, 38); ctx.lineTo(21, 47);
+  ctx.closePath(); ctx.fill();
+  if (count > 0) {
+    const txt = count > 99 ? '99+' : String(count);
+    const w = txt.length > 1 ? 34 : 24;
+    ctx.fillStyle = '#e74c3c';
+    roundRectPath(ctx, 63 - w, 1, w, 24, 12);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 63 - w / 2, 13);
+  }
+  favLink.href = favCanvas.toDataURL('image/png');
+}
+
+function updateTitle() {
+  document.title = (unread ? '(' + unread + ') ' : '') + baseTitle;
+}
+function updateBadge() {
+  updateTitle();
+  drawFavicon(unread);
+}
+drawFavicon(0);
+
+function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [880, 1174.7].forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f;
+      o.connect(g); g.connect(audioCtx.destination);
+      const t = audioCtx.currentTime + i * 0.18;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.4, t + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.start(t); o.stop(t + 0.18);
+    });
+  } catch (e) {}
+}
+
+function flashTitle() {
+  if (titleTimer) return;
+  let on = false;
+  titleTimer = setInterval(() => {
+    if (on) updateTitle();
+    else document.title = '【⚠ 有人 @ 你】';
+    on = !on;
+  }, 700);
+}
+function clearAlerts() {
+  unread = 0;
+  if (titleTimer) { clearInterval(titleTimer); titleTimer = null; }
+  updateBadge();
+}
+window.addEventListener('focus', clearAlerts);
+document.addEventListener('click', clearAlerts);
+
+function alertMention(m) {
+  beep();
+  flashTitle();
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  notify(m.nickname + ' @ 了你', (m.text || '').slice(0, 80));
+}
+
+// 页面在后台时的系统通知（@ 消息任何时候都通知）
+function notify(title, body) {
+  if (window.Notification && Notification.permission === 'granted') {
+    const n = new Notification(title, { body });
+    n.onclick = () => { window.focus(); n.close(); };
+  }
+}
+if (window.Notification && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// ---------- @ 自动补全 ----------
+const mentionBox = document.getElementById('mentionBox');
+let mentionState = null;
+
+function insertAtCursor(s) {
+  const start = inputEl.selectionStart ?? inputEl.value.length;
+  const end = inputEl.selectionEnd ?? start;
+  inputEl.value = inputEl.value.slice(0, start) + s + inputEl.value.slice(end);
+  const pos = start + s.length;
+  inputEl.setSelectionRange(pos, pos);
+  inputEl.dispatchEvent(new Event('input'));
+}
+
+function mentionCandidates(prefix) {
+  const set = new Map();
+  set.set('所有人', { nick: '所有人', sub: '提醒全部成员' });
+  for (const u of onlineUsers) if (u.ip !== myIp) set.set(u.nickname, { nick: u.nickname, sub: '在线' });
+  for (const n of knownNicks) {
+    if (!set.has(n) && n !== myNick && n !== 'all') set.set(n, { nick: n, sub: '' });
+  }
+  const p = prefix.toLowerCase();
+  return [...set.values()].filter(c => c.nick.toLowerCase().startsWith(p)).slice(0, 8);
+}
+
+function updateMentionBox() {
+  const upto = inputEl.value.slice(0, inputEl.selectionStart);
+  const m = /(^|[\s，。])@([^\s@]{0,20})$/.exec(upto);
+  if (!m) return hideMentionBox();
+  const items = mentionCandidates(m[2]);
+  if (!items.length) return hideMentionBox();
+  mentionState = { start: upto.length - m[2].length - 1, items, sel: 0 };
+  mentionBox.innerHTML = items.map((c, i) =>
+    '<div data-i="' + i + '" class="' + (i === 0 ? 'sel' : '') + '">@' + esc(c.nick) +
+    (c.sub ? '<span class="sub">' + c.sub + '</span>' : '') + '</div>').join('');
+  mentionBox.classList.add('show');
+}
+function hideMentionBox() { mentionBox.classList.remove('show'); mentionState = null; }
+
+function pickMention(i) {
+  const st = mentionState;
+  if (!st) return;
+  const c = st.items[i];
+  const cur = inputEl.selectionStart;
+  inputEl.value = inputEl.value.slice(0, st.start) + '@' + c.nick + ' ' + inputEl.value.slice(cur);
+  const pos = st.start + c.nick.length + 2;
+  inputEl.setSelectionRange(pos, pos);
+  hideMentionBox();
+  inputEl.focus();
+}
+mentionBox.addEventListener('mousedown', e => {
+  const d = e.target.closest('div[data-i]');
+  if (!d || !mentionState) return;
+  e.preventDefault();
+  pickMention(+d.dataset.i);
+});
+inputEl.addEventListener('input', updateMentionBox);
+inputEl.addEventListener('click', updateMentionBox);
+
+// ---------- 发送 ----------
+function send() {
+  const text = inputEl.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'chat', text }));
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  hideMentionBox();
+}
+document.getElementById('sendBtn').onclick = send;
+inputEl.addEventListener('keydown', e => {
+  if (mentionState) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const n = mentionState.items.length;
+      mentionState.sel = (mentionState.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+      [...mentionBox.children].forEach((d, i) => d.classList.toggle('sel', i === mentionState.sel));
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionState.sel); return; }
+    if (e.key === 'Escape') { hideMentionBox(); return; }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+});
+
+// ---------- 文件上传（图片/视频，二进制直传 + 进度） ----------
+const fileInput = document.getElementById('fileInput');
+const videoInput = document.getElementById('videoInput');
+const stickerInput = document.getElementById('stickerInput');
+const upProgress = document.getElementById('upProgress');
+
+function uploadTo(api, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', api + '?name=' + encodeURIComponent(file.name));
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const r = JSON.parse(xhr.responseText);
+        r.ok ? resolve(r) : reject(new Error(r.error || '上传失败'));
+      } catch { reject(new Error('上传失败')); }
+    };
+    xhr.onerror = () => reject(new Error('网络错误'));
+    xhr.send(file);
+  });
+}
+
+function showProgress(pct) {
+  if (pct == null) { upProgress.style.display = 'none'; return; }
+  upProgress.style.display = 'inline';
+  upProgress.textContent = '上传中 ' + pct + '%';
+}
+
+function sendMedia(type, url) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type, url }));
+  else alert('连接已断开，请稍候重试');
+}
+
+document.getElementById('imgBtn').onclick = () => fileInput.click();
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  fileInput.value = '';
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+  try {
+    showProgress(0);
+    const r = await uploadTo('/api/upload', file, showProgress);
+    sendMedia('image', r.url);
+  } catch (e) { alert('发送失败: ' + e.message); }
+  showProgress(null);
+});
+
+document.getElementById('videoBtn').onclick = () => videoInput.click();
+videoInput.addEventListener('change', async () => {
+  const file = videoInput.files[0];
+  videoInput.value = '';
+  if (!file) return;
+  if (file.size > 200 * 1024 * 1024) { alert('视频不能超过 200MB'); return; }
+  try {
+    showProgress(0);
+    const r = await uploadTo('/api/upload', file, showProgress);
+    sendMedia('video', r.url);
+  } catch (e) { alert('发送失败: ' + e.message); }
+  showProgress(null);
+});
+
+// ---------- 拖拽发送：把图片/视频文件拖到页面任意位置即可发送 ----------
+const dropMask = document.getElementById('dropMask');
+let dragDepth = 0;
+
+async function sendFiles(files) {
+  for (let file of files) {
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    if (!isVideo && !isImage) { alert('不支持的文件类型: ' + file.name); continue; }
+    const limitMB = isVideo ? 200 : 10;
+    if (file.size > limitMB * 1024 * 1024) { alert(file.name + ' 超过 ' + limitMB + 'MB 限制'); continue; }
+    file = normalizeFile(file);
+    try {
+      showProgress(0);
+      const r = await uploadTo('/api/upload', file, showProgress);
+      sendMedia(isVideo ? 'video' : 'image', r.url);
+    } catch (e) { alert(file.name + ' 发送失败: ' + e.message); }
+  }
+  showProgress(null);
+}
+
+// 剪贴板/拖拽来的文件可能没有扩展名，按 MIME 补上（服务端按扩展名校验）
+function normalizeFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (/^(png|jpe?g|gif|webp|mp4|webm|mov|m4v)$/.test(ext)) return file;
+  const mimeExt = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+    'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov',
+  }[file.type] || 'png';
+  return new File([file], 'pasted-' + Date.now() + '.' + mimeExt, { type: file.type });
+}
+
+// Ctrl+V 粘贴截图/文件直接发送（纯文本粘贴不受影响）
+document.addEventListener('paste', e => {
+  const items = [...(e.clipboardData ? e.clipboardData.items : [])];
+  const fileItems = items.filter(i => i.kind === 'file');
+  if (!fileItems.length) return;
+  e.preventDefault();
+  const files = fileItems.map(i => i.getAsFile()).filter(Boolean);
+  if (files.length) sendFiles(files);
+});
+
+window.addEventListener('dragenter', e => {
+  if (![...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) return;
+  e.preventDefault();
+  dragDepth++;
+  dropMask.classList.add('show');
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('dragleave', e => {
+  if (--dragDepth <= 0) { dragDepth = 0; dropMask.classList.remove('show'); }
+});
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropMask.classList.remove('show');
+  const files = [...(e.dataTransfer ? e.dataTransfer.files : [])];
+  if (files.length) sendFiles(files);
+});
+
+// ---------- 表情 / 贴纸面板 ----------
+const EMOJIS = '😀😁😂🤣😃😄😅😆😉😊😋😎😍😘🥰😗😙😚🙂🤗🤔😐😑😶🙄😏😣😥😮🤐😯😪😫😴😌😛😜😝🤤😒😓😔😕🙃🤑😲🙁😖😞😟😤😢😭😦😧😨😩🤯😬😰😱🥵🥶😳🤪😵😡😠🤬😷🤒🤕🤢🤮🥴😇🥳🥺🤠🤡🤥🤫🤭🧐🤓😈👿👍👎👌✌️🤞🤟🤘👏🙌🙏💪🤝👊✊🖐️✋🤚👋🤙💯🔥🎉🎊❤️🧡💛💚💙💜🖤💔💕💖💗💘💝✨⭐🌟💫☀️🌙⛅🌈⚡❄️🌹🌺🌸🍀🍎🍉🍓🍔🍕🍜🎂🍺☕🧧💰🎁⚽🏀🎮🎵🚗✈️🚀🏠📱💻⌚📷🔒🔑'.match(/\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?/gu) || [];
+
+const emojiPanel = document.getElementById('emojiPanel');
+const emojiGrid = document.getElementById('emojiGrid');
+const stickerGrid = document.getElementById('stickerGrid');
+const tabEmoji = document.getElementById('tabEmoji');
+const tabSticker = document.getElementById('tabSticker');
+
+emojiGrid.innerHTML = EMOJIS.map(e => '<span>' + e + '</span>').join('');
+
+document.getElementById('emojiBtn').onclick = e => {
+  e.stopPropagation();
+  emojiPanel.classList.toggle('show');
+  if (emojiPanel.classList.contains('show') && stickerGrid.style.display !== 'none') loadStickers();
+};
+emojiPanel.addEventListener('mousedown', e => e.preventDefault());
+document.addEventListener('click', e => {
+  if (!emojiPanel.contains(e.target) && e.target.id !== 'emojiBtn') emojiPanel.classList.remove('show');
+});
+
+tabEmoji.onclick = () => {
+  tabEmoji.classList.add('on'); tabSticker.classList.remove('on');
+  emojiGrid.style.display = ''; stickerGrid.style.display = 'none';
+};
+tabSticker.onclick = () => {
+  tabSticker.classList.add('on'); tabEmoji.classList.remove('on');
+  emojiGrid.style.display = 'none'; stickerGrid.style.display = '';
+  loadStickers();
+};
+
+emojiGrid.addEventListener('click', e => {
+  if (e.target.tagName === 'SPAN') {
+    insertAtCursor(e.target.textContent);
+    inputEl.focus();
+  }
+});
+
+async function loadStickers() {
+  const r = await (await fetch('/api/stickers')).json();
+  const tiles = r.stickers.map(u => isVideoUrl(u)
+    ? '<video src="' + u + '" muted loop autoplay playsinline></video>'
+    : '<img src="' + u + '">').join('');
+  stickerGrid.innerHTML = tiles +
+    '<div class="addTile" title="添加贴纸（图片 5MB 内 / 视频 200MB 内）">＋</div>' +
+    (r.stickers.length ? '' : '<div class="empty">还没有贴纸，点 ＋ 添加，或把聊天里的图片/视频"存为贴纸"</div>');
+}
+
+stickerGrid.addEventListener('click', e => {
+  if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') {
+    sendMedia('sticker', e.target.getAttribute('src'));
+    emojiPanel.classList.remove('show');
+  } else if (e.target.classList.contains('addTile')) {
+    stickerInput.click();
+  }
+});
+
+stickerInput.addEventListener('change', async () => {
+  const file = stickerInput.files[0];
+  stickerInput.value = '';
+  if (!file) return;
+  const isVideo = file.type.startsWith('video/');
+  if (file.size > (isVideo ? 200 : 5) * 1024 * 1024) { alert(isVideo ? '视频贴纸不能超过 200MB' : '贴纸不能超过 5MB'); return; }
+  try {
+    await uploadTo('/api/stickers', file);
+    loadStickers();
+  } catch (e) { alert('添加失败: ' + e.message); }
+});
+
+// ---------- 昵称 ----------
+async function setNickname(name) {
+  name = (name || '').trim();
+  if (!name) return false;
+  const resp = await fetch('/api/nickname', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname: name }),
+  });
+  if (resp.ok) {
+    localStorage.setItem('nickname', name);
+    myNick = name;
+    meEl.textContent = name + ' (' + myIp + ')';
+    return true;
+  }
+  return false;
+}
+document.getElementById('nickOk').onclick = async () => {
+  if (await setNickname(nickInput.value)) maskEl.classList.remove('show');
+  else alert('请输入昵称');
+};
+nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('nickOk').click(); });
+// ---------- 设置面板：昵称 / 主题 / 清空记录 ----------
+const settingsMask = document.getElementById('settingsMask');
+const setNickInput = document.getElementById('setNickInput');
+const themeLight = document.getElementById('themeLight');
+const themeDark = document.getElementById('themeDark');
+
+meEl.onclick = () => {
+  setNickInput.value = myNick || '';
+  document.getElementById('myIpText').textContent = myIp || '';
+  syncThemeButtons();
+  settingsMask.classList.add('show');
+  setNickInput.focus();
+};
+document.getElementById('settingsClose').onclick = () => settingsMask.classList.remove('show');
+settingsMask.addEventListener('click', e => { if (e.target === settingsMask) settingsMask.classList.remove('show'); });
+
+document.getElementById('setNickSave').onclick = async () => {
+  if (await setNickname(setNickInput.value)) settingsMask.classList.remove('show');
+  else alert('请输入昵称');
+};
+setNickInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('setNickSave').click(); });
+
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('theme', t);
+  syncThemeButtons();
+}
+function syncThemeButtons() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  themeLight.classList.toggle('on', !dark);
+  themeDark.classList.toggle('on', dark);
+}
+themeLight.onclick = () => setTheme('light');
+themeDark.onclick = () => setTheme('dark');
+
+document.getElementById('clearBtn').onclick = async () => {
+  if (!confirm('确定要清空所有聊天记录吗？\n所有人的消息、图片和视频都会被删除（贴纸库保留），且无法恢复。')) return;
+  const r = await (await fetch('/api/clear', { method: 'POST' })).json();
+  if (!r.ok) alert('清空失败: ' + (r.error || '未知错误'));
+  settingsMask.classList.remove('show');
+};
+
+// ---------- 启动：识别身份，决定是否需要设置昵称 ----------
+(async () => {
+  const me = await (await fetch('/api/me')).json();
+  myIp = me.ip;
+  if (me.nickname) {
+    // 服务器已记住这个 IP 的昵称，无需再设置
+  } else if (localStorage.getItem('nickname')) {
+    await setNickname(localStorage.getItem('nickname')); // 本浏览器以前设置过，自动恢复
+  } else {
+    nickInput.value = me.defaultNickname;
+    maskEl.classList.add('show');
+    nickInput.focus();
+    nickInput.select();
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
