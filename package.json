@@ -1,10 +1,12 @@
 {
   "name": "localchat",
   "version": "1.0.0",
-  "description": "局域网浏览器聊天工具：消息/图片/昵称/离线留言，数据全部存在本机",
+  "description": "局域网浏览器聊天工具：消息/@提醒/图片/视频/贴纸/离线留言，数据全部存在本机，可打包为单文件 exe",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "launch": "node launcher.js",
+    "build": "node build.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
